@@ -172,11 +172,12 @@ def generate_image(prompt):
     payload = {
         "model": "black-forest-labs/flux-1-schnell",
         "prompt": prompt,
-        "size": "1024x1024"
+        "width": 1024,
+        "height": 1024
     }
 
     response = requests.post(
-        "https://openrouter.ai/api/v1/images/generations",
+        "https://openrouter.ai/api/v1/images",
         headers=headers,
         json=payload,
         timeout=120
@@ -187,9 +188,6 @@ def generate_image(prompt):
         raise Exception("Flux image generation failed")
 
     data = response.json()
-
-    if "data" not in data:
-        raise Exception(f"Unexpected Flux response: {data}")
 
     image_url = data["data"][0]["url"]
 

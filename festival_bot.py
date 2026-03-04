@@ -158,39 +158,19 @@ no text,
 # IMAGE GENERATION
 # =============================
 def generate_image(prompt):
+    import urllib.parse
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    encoded_prompt = urllib.parse.quote(prompt)
 
-    payload = {
-        "model": IMAGE_MODEL,
-        "prompt": prompt
-    }
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
 
-    response = requests.post(
-        "https://openrouter.ai/api/v1/images/generations",
-        headers=headers,
-        json=payload,
-        timeout=120
-    )
+    response = requests.get(url)
 
     if response.status_code != 200:
-        print("Image API error:", response.text)
         raise Exception("Image generation failed")
 
-    data = response.json()
-
-    if "data" not in data:
-        raise Exception(f"Unexpected image response: {data}")
-
-    image_url = data["data"][0]["url"]
-
-    img = requests.get(image_url).content
-
     with open("festival.png", "wb") as f:
-        f.write(img)
+        f.write(response.content)
 
     return "festival.png"
 # =============================

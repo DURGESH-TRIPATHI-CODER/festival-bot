@@ -159,20 +159,24 @@ no text,
 # =============================
 def generate_image(prompt):
     import urllib.parse
+    import time
 
     encoded_prompt = urllib.parse.quote(prompt)
 
     url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
 
-    response = requests.get(url)
+    for attempt in range(5):
+        response = requests.get(url)
 
-    if response.status_code != 200:
-        raise Exception("Image generation failed")
+        if response.status_code == 200:
+            with open("festival.png", "wb") as f:
+                f.write(response.content)
+            return "festival.png"
 
-    with open("festival.png", "wb") as f:
-        f.write(response.content)
+        print("Image API failed. Retrying...")
+        time.sleep(5)
 
-    return "festival.png"
+    raise Exception("Image generation failed after retries")
 # =============================
 # POST TO X
 # =============================

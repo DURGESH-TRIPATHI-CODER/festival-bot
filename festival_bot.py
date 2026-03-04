@@ -162,36 +162,45 @@ no text
 
 def generate_image(prompt):
 
-    encoded = urllib.parse.quote(prompt)
-
-    url = f"https://image.pollinations.ai/prompt/{encoded}?model=flux&width=1024&height=1024"
-
     headers = {
-        "User-Agent": "festival-bot"
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com",
+        "X-Title": "festival-bot"
     }
 
-    for attempt in range(5):
+    payload = {
+        "model": "black-forest-labs/flux-1-schnell",
+        "prompt": prompt,
+        "size": "1024x1024"
+    }
 
-        try:
-            r = requests.get(url, headers=headers, timeout=60)
+    response = requests.post(
+        "https://openrouter.ai/api/v1/images/generations",
+        headers=headers,
+        json=payload,
+        timeout=120
+    )
 
-            if r.status_code == 200:
+    if response.status_code != 200:
+        print("Flux API error:", response.text)
+        raise Exception("Flux image generation failed")
 
-                with open("festival.png", "wb") as f:
-                    f.write(r.content)
+    data = response.json()
 
-                print("🖼️ Image generated")
-                return "festival.png"
+    if "data" not in data:
+        raise Exception(f"Unexpected Flux response: {data}")
 
-        except:
-            pass
+    image_url = data["data"][0]["url"]
 
-        print("Image retry...")
-        time.sleep(5)
+    img = requests.get(image_url).content
 
-    raise Exception("Image generation failed")
+    with open("festival.png", "wb") as f:
+        f.write(img)
 
+    print("🖼️ Flux image generated")
 
+    return "festival.png"
 # =============================
 # POST USING SELENIUM
 # =============================

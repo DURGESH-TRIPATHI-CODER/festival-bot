@@ -157,7 +157,6 @@ no text,
 # =============================
 # IMAGE GENERATION
 # =============================
-
 def generate_image(prompt):
 
     headers = {
@@ -167,20 +166,24 @@ def generate_image(prompt):
 
     payload = {
         "model": IMAGE_MODEL,
-        "prompt": prompt,
-        "size": "1024x1024"
+        "prompt": prompt
     }
 
     response = requests.post(
         "https://openrouter.ai/api/v1/images/generations",
         headers=headers,
-        json=payload
+        json=payload,
+        timeout=120
     )
+
+    if response.status_code != 200:
+        print("Image API error:", response.text)
+        raise Exception("Image generation failed")
 
     data = response.json()
 
     if "data" not in data:
-        raise Exception(f"Image generation error: {data}")
+        raise Exception(f"Unexpected image response: {data}")
 
     image_url = data["data"][0]["url"]
 
@@ -190,7 +193,6 @@ def generate_image(prompt):
         f.write(img)
 
     return "festival.png"
-
 # =============================
 # POST TO X
 # =============================

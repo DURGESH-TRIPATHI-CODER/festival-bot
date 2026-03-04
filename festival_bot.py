@@ -23,8 +23,6 @@ TEXT_MODEL = os.getenv("OPENROUTER_TEXT_MODEL")
 X_USERNAME = os.getenv("X_USERNAME")
 X_PASSWORD = os.getenv("X_PASSWORD")
 
-print("TEXT MODEL:", TEXT_MODEL)
-
 # =============================
 # GOOGLE FESTIVAL FETCH
 # =============================

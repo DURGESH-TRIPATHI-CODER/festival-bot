@@ -1,9 +1,17 @@
 import os
 import time
 import requests
-import tweepy
+import urllib.parse
 from datetime import datetime
 from googleapiclient.discovery import build
+
+# selenium
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+
 
 # =============================
 # ENV VARIABLES
@@ -13,13 +21,11 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 TEXT_MODEL = os.getenv("OPENROUTER_TEXT_MODEL")
-IMAGE_MODEL = os.getenv("OPENROUTER_IMAGE_MODEL")
+
+X_USERNAME = os.getenv("X_USERNAME")
+X_PASSWORD = os.getenv("X_PASSWORD")
+
 print("TEXT MODEL:", TEXT_MODEL)
-print("IMAGE MODEL:", IMAGE_MODEL)
-X_API_KEY = os.getenv("X_API_KEY")
-X_API_SECRET = os.getenv("X_API_SECRET")
-X_ACCESS_TOKEN = os.getenv("X_ACCESS_TOKEN")
-X_ACCESS_SECRET = os.getenv("X_ACCESS_SECRET")
 
 # =============================
 # GOOGLE FESTIVAL FETCH
@@ -48,11 +54,12 @@ def get_today_festival():
 
     return events[0]["summary"]
 
+
 # =============================
-# OPENROUTER TEXT CALL
+# OPENROUTER TEXT
 # =============================
 
-def call_openrouter_text(prompt):
+def call_openrouter(prompt):
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -68,28 +75,20 @@ def call_openrouter_text(prompt):
         ]
     }
 
-    for attempt in range(3):
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=60
+    )
 
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60
-        )
+    data = response.json()
 
-        data = response.json()
-
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"].strip()
-
-        if "error" in data and data["error"].get("code") == 429:
-            print("⚠️ Rate limited, retrying in 10 seconds...")
-            time.sleep(10)
-            continue
-
+    if "choices" not in data:
         raise Exception(f"OpenRouter error: {data}")
 
-    raise Exception("OpenRouter failed after retries.")
+    return data["choices"][0]["message"]["content"].strip()
+
 
 # =============================
 # RESEARCH
@@ -107,7 +106,8 @@ TRADITIONAL_COLORS
 DECORATIVE_ELEMENTS
 """
 
-    return call_openrouter_text(prompt)
+    return call_openrouter(prompt)
+
 
 # =============================
 # CAPTION
@@ -129,7 +129,8 @@ Rules:
 - end with 2 hashtags
 """
 
-    return call_openrouter_text(prompt)
+    return call_openrouter(prompt)
+
 
 # =============================
 # IMAGE PROMPT
@@ -138,105 +139,117 @@ Rules:
 def generate_image_prompt(festival, research):
 
     prompt = f"""
-Create a detailed AI art prompt for {festival}.
+Create an AI poster prompt for {festival}.
 
-Use cultural elements:
+Use:
 
 {research}
 
 Style:
-traditional Indian decorative border,
-festival colors,
-cinematic lighting,
-no text,
-1024x1024
+Indian festive poster
+traditional border
+festival colors
+cinematic lighting
+no text
 """
 
-    return call_openrouter_text(prompt)
+    return call_openrouter(prompt)
+
 
 # =============================
-# IMAGE GENERATION
+# IMAGE GENERATION (FLUX)
 # =============================
+
 def generate_image(prompt):
-    import urllib.parse
-    import time
 
-    encoded_prompt = urllib.parse.quote(prompt)
+    encoded = urllib.parse.quote(prompt)
 
-    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=flux&width=1024&height=1024"
+    url = f"https://image.pollinations.ai/prompt/{encoded}?model=flux&width=1024&height=1024"
 
     headers = {
         "User-Agent": "festival-bot"
     }
 
-    for attempt in range(6):
-        try:
-            response = requests.get(url, headers=headers, timeout=60)
+    for attempt in range(5):
 
-            if response.status_code == 200 and len(response.content) > 5000:
+        try:
+            r = requests.get(url, headers=headers, timeout=60)
+
+            if r.status_code == 200:
+
                 with open("festival.png", "wb") as f:
-                    f.write(response.content)
+                    f.write(r.content)
 
                 print("🖼️ Image generated")
                 return "festival.png"
 
-            print("Image API failed. Retrying...")
-            time.sleep(6)
+        except:
+            pass
 
-        except Exception as e:
-            print("Image request error:", e)
-            time.sleep(6)
+        print("Image retry...")
+        time.sleep(5)
 
-    # fallback so bot never crashes
-    print("⚠️ Image generation failed, using fallback image")
+    raise Exception("Image generation failed")
 
-    fallback = "https://picsum.photos/1024"
-    img = requests.get(fallback).content
 
-    with open("festival.png", "wb") as f:
-        f.write(img)
-
-    return "festival.png"
 # =============================
-# POST TO X
+# POST USING SELENIUM
 # =============================
 
 def post_to_x(caption, image_path):
 
-    auth = tweepy.OAuth1UserHandler(
-        X_API_KEY,
-        X_API_SECRET,
-        X_ACCESS_TOKEN,
-        X_ACCESS_SECRET
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=chrome_options
     )
 
-    api = tweepy.API(auth)
+    print("Opening X login...")
 
-    media = api.media_upload(image_path)
+    driver.get("https://x.com/login")
 
-    client = tweepy.Client(
-        consumer_key=X_API_KEY,
-        consumer_secret=X_API_SECRET,
-        access_token=X_ACCESS_TOKEN,
-        access_token_secret=X_ACCESS_SECRET
-    )
+    time.sleep(10)
 
-    response = client.create_tweet(
-        text=caption,
-        media_ids=[media.media_id]
-    )
+    username = driver.find_element(By.NAME, "text")
+    username.send_keys(X_USERNAME)
+    username.submit()
 
-    tweet_id = response.data["id"]
+    time.sleep(6)
 
-    username = api.verify_credentials().screen_name
+    password = driver.find_element(By.NAME, "password")
+    password.send_keys(X_PASSWORD)
+    password.submit()
 
-    tweet_url = f"https://x.com/{username}/status/{tweet_id}"
+    time.sleep(10)
 
-    print("✅ Tweet Posted Successfully")
-    print("🔗", tweet_url)
+    driver.get("https://x.com/compose/tweet")
+
+    time.sleep(8)
+
+    tweet_box = driver.find_element(By.XPATH, "//div[@role='textbox']")
+    tweet_box.send_keys(caption)
+
+    upload = driver.find_element(By.XPATH, "//input[@type='file']")
+    upload.send_keys(os.path.abspath(image_path))
+
+    time.sleep(5)
+
+    post_button = driver.find_element(By.XPATH, "//div[@data-testid='tweetButton']")
+    post_button.click()
+
+    time.sleep(6)
+
+    print("✅ Tweet posted")
+
+    driver.quit()
+
 
 # =============================
-# MAIN PIPELINE
+# MAIN
 # =============================
 
 def main():
@@ -246,24 +259,25 @@ def main():
     festival = get_today_festival()
 
     if not festival:
-        print("No festival today.")
+        print("No festival today")
         return
 
     print("🎉 Today's Festival:", festival)
 
     research = research_festival(festival)
 
-    time.sleep(5)
+    time.sleep(3)
 
     caption = generate_caption(festival, research)
 
-    time.sleep(5)
+    time.sleep(3)
 
     image_prompt = generate_image_prompt(festival, research)
 
     image_path = generate_image(image_prompt)
 
     post_to_x(caption, image_path)
+
 
 # =============================
 

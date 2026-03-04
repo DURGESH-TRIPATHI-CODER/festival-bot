@@ -4,8 +4,6 @@ import requests
 import urllib.parse
 from datetime import datetime
 from googleapiclient.discovery import build
-
-# selenium
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service

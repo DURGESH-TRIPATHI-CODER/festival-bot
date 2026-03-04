@@ -3,8 +3,7 @@ name: Daily Festival Bot
 on:
   workflow_dispatch:
   schedule:
-    - cron: '30 3 * * *'   # 9 AM IST
-
+    - cron: "30 3 * * *"   # 9 AM IST
 
 jobs:
   run-bot:
@@ -22,15 +21,14 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
-- name: Run bot
-  env:
-    GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-    OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-    OPENROUTER_TEXT_MODEL: ${{ secrets.OPENROUTER_TEXT_MODEL }}
-    OPENROUTER_IMAGE_MODEL: ${{ secrets.OPENROUTER_IMAGE_MODEL }}
-    X_API_KEY: ${{ secrets.X_API_KEY }}
-    X_API_SECRET: ${{ secrets.X_API_SECRET }}
-    X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
-    X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
-  run: python festival_bot.py
-
+      - name: Run bot
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_TEXT_MODEL: ${{ secrets.OPENROUTER_TEXT_MODEL }}
+          OPENROUTER_IMAGE_MODEL: ${{ secrets.OPENROUTER_IMAGE_MODEL }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+        run: python festival_bot.py

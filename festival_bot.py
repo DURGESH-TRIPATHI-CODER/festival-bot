@@ -1,116 +1,271 @@
-from googleapiclient.discovery import build
-from datetime import datetime
-import requests
-import urllib.parse
 import os
+import requests
+import tweepy
+import logging
+from datetime import datetime
+from googleapiclient.discovery import build
 
-
+# ==============================
+# ENV VARIABLES
+# ==============================
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL")
+TEXT_MODEL = os.getenv("OPENROUTER_TEXT_MODEL")
+IMAGE_MODEL = os.getenv("OPENROUTER_IMAGE_MODEL")
 
-if not GOOGLE_API_KEY:
-    raise ValueError("❌ GOOGLE_API_KEY not found in .env")
+X_API_KEY = os.getenv("X_API_KEY")
+X_API_SECRET = os.getenv("X_API_SECRET")
+X_ACCESS_TOKEN = os.getenv("X_ACCESS_TOKEN")
+X_ACCESS_SECRET = os.getenv("X_ACCESS_SECRET")
 
-if not OPENROUTER_API_KEY:
-    raise ValueError("❌ OPENROUTER_API_KEY not found in .env")
+# ==============================
+# LOGGING
+# ==============================
 
+logging.basicConfig(level=logging.INFO)
+
+# ==============================
+# GET TODAY FESTIVAL
+# ==============================
 
 def get_today_festival():
-    try:
-        service = build("calendar", "v3", developerKey=GOOGLE_API_KEY)
 
-        today = datetime.utcnow().date().isoformat()
+    service = build("calendar", "v3", developerKey=GOOGLE_API_KEY)
 
-        events_result = service.events().list(
-            calendarId="en.indian#holiday@group.v.calendar.google.com",
-            timeMin=today + "T00:00:00Z",
-            timeMax=today + "T23:59:59Z",
-            singleEvents=True
-        ).execute()
+    today = datetime.utcnow().date().isoformat()
 
-        events = events_result.get("items", [])
+    events = service.events().list(
+        calendarId="en.indian#holiday@group.v.calendar.google.com",
+        timeMin=today + "T00:00:00Z",
+        timeMax=today + "T23:59:59Z",
+        singleEvents=True
+    ).execute().get("items", [])
 
-        if not events:
-            return None
-
-        return events[0]["summary"]
-
-    except Exception as e:
-        print("❌ Error fetching festival:", e)
+    if not events:
         return None
 
+    return events[0]["summary"]
 
+# ==============================
+# OPENROUTER TEXT CALL
+# ==============================
 
-def generate_post(festival):
+def call_openrouter_text(prompt):
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com",
+        "X-Title": "festival-bot"
+    }
+
+    payload = {
+        "model": TEXT_MODEL,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
+
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=60
+    )
+
+    data = response.json()
+
+    print("OpenRouter Response:", data)
+
+    if "choices" not in data:
+        raise Exception(f"OpenRouter error: {data}")
+
+    return data["choices"][0]["message"]["content"].strip()
+
+# ==============================
+# RESEARCH FESTIVAL
+# ==============================
+
+def research_festival(festival):
 
     prompt = f"""
-    Write a short engaging X (Twitter) post for the Indian festival: {festival}.
-    Keep it under 200 characters.
-    Add emojis and 3 relevant hashtags.
-    Make it warm and festive.
-    """
+Research the Indian festival: {festival}
+
+Return:
+
+CULTURAL_SIGNIFICANCE:
+2 short sentences
+
+KEY_SYMBOLS:
+comma separated
+
+TRADITIONAL_COLORS:
+comma separated
+
+DECORATIVE_ELEMENTS:
+comma separated
+"""
+
+    return call_openrouter_text(prompt)
+
+# ==============================
+# CAPTION GENERATION
+# ==============================
+
+def generate_caption(festival, research):
+
+    prompt = f"""
+Using this research:
+
+{research}
+
+Write a warm natural X post about {festival}.
+
+Rules:
+- Under 220 characters
+- Use only 2-3 emojis
+- Avoid robotic tone
+- End with 2 meaningful hashtags
+"""
+
+    return call_openrouter_text(prompt)
+
+# ==============================
+# IMAGE PROMPT
+# ==============================
+
+def generate_image_prompt(festival, research):
+
+    prompt = f"""
+Create a high quality image prompt for {festival} festival.
+
+Use this cultural research:
+
+{research}
+
+Requirements:
+- elegant decorative border
+- traditional Indian colors
+- cinematic lighting
+- centered composition
+- no text
+- no watermark
+- 1024x1024
+"""
+
+    return call_openrouter_text(prompt)
+
+# ==============================
+# GENERATE IMAGE (FLUX)
+# ==============================
+
+def generate_image(image_prompt):
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
 
-    data = {
-        "model": OPENROUTER_MODEL,
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
+    payload = {
+        "model": IMAGE_MODEL,
+        "prompt": image_prompt,
+        "size": "1024x1024"
     }
 
-    try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=data
-        )
+    response = requests.post(
+        "https://openrouter.ai/api/v1/images/generations",
+        headers=headers,
+        json=payload,
+        timeout=120
+    )
 
-        result = response.json()
+    data = response.json()
 
-        return result["choices"][0]["message"]["content"].strip()
+    print("Image API Response:", data)
 
-    except Exception as e:
-        print("❌ OpenRouter error:", e)
-        return None
+    if "data" not in data:
+        raise Exception(f"Image generation error: {data}")
 
+    image_url = data["data"][0]["url"]
 
-def open_x_with_text(text):
-    encoded_text = urllib.parse.quote_plus(text)
-    url = f"https://twitter.com/intent/tweet?text={encoded_text}"
-    print("\n🌐 Post on X using this link:\n")
-    print(url)
+    image_data = requests.get(image_url).content
 
+    filename = "festival.png"
 
+    with open(filename, "wb") as f:
+        f.write(image_data)
+
+    return filename
+
+# ==============================
+# POST TO X
+# ==============================
+
+def post_to_x(caption, image_path):
+
+    auth = tweepy.OAuth1UserHandler(
+        X_API_KEY,
+        X_API_SECRET,
+        X_ACCESS_TOKEN,
+        X_ACCESS_SECRET
+    )
+
+    api = tweepy.API(auth)
+
+    media = api.media_upload(image_path)
+
+    client = tweepy.Client(
+        consumer_key=X_API_KEY,
+        consumer_secret=X_API_SECRET,
+        access_token=X_ACCESS_TOKEN,
+        access_token_secret=X_ACCESS_SECRET
+    )
+
+    response = client.create_tweet(
+        text=caption,
+        media_ids=[media.media_id]
+    )
+
+    tweet_id = response.data["id"]
+
+    username = api.verify_credentials().screen_name
+
+    tweet_url = f"https://x.com/{username}/status/{tweet_id}"
+
+    print("✅ Tweet Posted Successfully")
+    print("🔗 Tweet URL:", tweet_url)
+
+    return tweet_url
+
+# ==============================
+# MAIN PIPELINE
+# ==============================
 
 def main():
+
     print("🔎 Checking today's Indian festival...")
 
     festival = get_today_festival()
 
     if not festival:
-        print("📭 No Indian festival today.")
+        print("No festival today.")
         return
 
-    print(f"🎉 Today's Festival: {festival}")
-    print("🤖 Generating caption via OpenRouter...")
+    print("🎉 Today's Festival:", festival)
 
-    post_text = generate_post(festival)
+    research = research_festival(festival)
 
-    if not post_text:
-        print("❌ Failed to generate post.")
-        return
+    caption = generate_caption(festival, research)
 
-    print("\n📝 Generated Post:\n")
-    print(post_text)
+    image_prompt = generate_image_prompt(festival, research)
 
-    print("\n🌐 Opening X...")
-    open_x_with_text(post_text)
+    image_path = generate_image(image_prompt)
+
+    tweet_url = post_to_x(caption, image_path)
+
+    print("Tweet URL:", tweet_url)
 
 
 if __name__ == "__main__":

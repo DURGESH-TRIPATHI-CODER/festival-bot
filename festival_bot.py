@@ -163,20 +163,40 @@ def generate_image(prompt):
 
     encoded_prompt = urllib.parse.quote(prompt)
 
-    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=flux&width=1024&height=1024"
 
-    for attempt in range(5):
-        response = requests.get(url)
+    headers = {
+        "User-Agent": "festival-bot"
+    }
 
-        if response.status_code == 200:
-            with open("festival.png", "wb") as f:
-                f.write(response.content)
-            return "festival.png"
+    for attempt in range(6):
+        try:
+            response = requests.get(url, headers=headers, timeout=60)
 
-        print("Image API failed. Retrying...")
-        time.sleep(5)
+            if response.status_code == 200 and len(response.content) > 5000:
+                with open("festival.png", "wb") as f:
+                    f.write(response.content)
 
-    raise Exception("Image generation failed after retries")
+                print("🖼️ Image generated")
+                return "festival.png"
+
+            print("Image API failed. Retrying...")
+            time.sleep(6)
+
+        except Exception as e:
+            print("Image request error:", e)
+            time.sleep(6)
+
+    # fallback so bot never crashes
+    print("⚠️ Image generation failed, using fallback image")
+
+    fallback = "https://picsum.photos/1024"
+    img = requests.get(fallback).content
+
+    with open("festival.png", "wb") as f:
+        f.write(img)
+
+    return "festival.png"
 # =============================
 # POST TO X
 # =============================

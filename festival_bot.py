@@ -162,6 +162,8 @@ no text
 
 def generate_image(prompt):
 
+    url = "https://openrouter.ai/api/v1/images"
+
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
@@ -176,18 +178,20 @@ def generate_image(prompt):
         "height": 1024
     }
 
-    response = requests.post(
-        "https://openrouter.ai/api/v1/images",
-        headers=headers,
-        json=payload,
-        timeout=120
-    )
+    response = requests.post(url, headers=headers, json=payload, timeout=120)
 
     if response.status_code != 200:
-        print("Flux API error:", response.text)
-        raise Exception("Flux image generation failed")
+        print("Flux error response:", response.text)
+        raise Exception("Flux API request failed")
 
-    data = response.json()
+    try:
+        data = response.json()
+    except Exception:
+        print("Non JSON response:", response.text)
+        raise Exception("Flux returned invalid response")
+
+    if "data" not in data:
+        raise Exception(f"Unexpected Flux response: {data}")
 
     image_url = data["data"][0]["url"]
 

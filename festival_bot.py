@@ -1,13 +1,13 @@
 import os
+import time
 import requests
 import tweepy
-import logging
 from datetime import datetime
 from googleapiclient.discovery import build
-import time
-# ==============================
+
+# =============================
 # ENV VARIABLES
-# ==============================
+# =============================
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
@@ -20,19 +20,18 @@ X_API_SECRET = os.getenv("X_API_SECRET")
 X_ACCESS_TOKEN = os.getenv("X_ACCESS_TOKEN")
 X_ACCESS_SECRET = os.getenv("X_ACCESS_SECRET")
 
-# ==============================
-# LOGGING
-# ==============================
-
-logging.basicConfig(level=logging.INFO)
-
-# ==============================
-# GET TODAY FESTIVAL
-# ==============================
+# =============================
+# GOOGLE FESTIVAL FETCH
+# =============================
 
 def get_today_festival():
 
-    service = build("calendar", "v3", developerKey=GOOGLE_API_KEY)
+    service = build(
+        "calendar",
+        "v3",
+        developerKey=GOOGLE_API_KEY,
+        cache_discovery=False
+    )
 
     today = datetime.utcnow().date().isoformat()
 
@@ -48,10 +47,9 @@ def get_today_festival():
 
     return events[0]["summary"]
 
-# ==============================
+# =============================
 # OPENROUTER TEXT CALL
-# ==============================
-
+# =============================
 
 def call_openrouter_text(prompt):
 
@@ -84,16 +82,17 @@ def call_openrouter_text(prompt):
             return data["choices"][0]["message"]["content"].strip()
 
         if "error" in data and data["error"].get("code") == 429:
-            print("⚠️ Rate limited. Retrying in 10 seconds...")
+            print("⚠️ Rate limited, retrying in 10 seconds...")
             time.sleep(10)
             continue
 
         raise Exception(f"OpenRouter error: {data}")
 
     raise Exception("OpenRouter failed after retries.")
-# ==============================
-# RESEARCH FESTIVAL
-# ==============================
+
+# =============================
+# RESEARCH
+# =============================
 
 def research_festival(festival):
 
@@ -101,25 +100,17 @@ def research_festival(festival):
 Research the Indian festival: {festival}
 
 Return:
-
-CULTURAL_SIGNIFICANCE:
-2 short sentences
-
-KEY_SYMBOLS:
-comma separated
-
-TRADITIONAL_COLORS:
-comma separated
-
-DECORATIVE_ELEMENTS:
-comma separated
+CULTURAL_SIGNIFICANCE
+KEY_SYMBOLS
+TRADITIONAL_COLORS
+DECORATIVE_ELEMENTS
 """
 
     return call_openrouter_text(prompt)
 
-# ==============================
-# CAPTION GENERATION
-# ==============================
+# =============================
+# CAPTION
+# =============================
 
 def generate_caption(festival, research):
 
@@ -128,47 +119,45 @@ Using this research:
 
 {research}
 
-Write a warm natural X post about {festival}.
+Write a warm human X post about {festival}.
 
 Rules:
-- Under 220 characters
-- Use only 2-3 emojis
-- Avoid robotic tone
-- End with 2 meaningful hashtags
+- under 220 characters
+- 2–3 emojis
+- natural tone
+- end with 2 hashtags
 """
 
     return call_openrouter_text(prompt)
 
-# ==============================
+# =============================
 # IMAGE PROMPT
-# ==============================
+# =============================
 
 def generate_image_prompt(festival, research):
 
     prompt = f"""
-Create a high quality image prompt for {festival} festival.
+Create a detailed AI art prompt for {festival}.
 
-Use this cultural research:
+Use cultural elements:
 
 {research}
 
-Requirements:
-- elegant decorative border
-- traditional Indian colors
-- cinematic lighting
-- centered composition
-- no text
-- no watermark
-- 1024x1024
+Style:
+traditional Indian decorative border,
+festival colors,
+cinematic lighting,
+no text,
+1024x1024
 """
 
     return call_openrouter_text(prompt)
 
-# ==============================
-# GENERATE IMAGE (FLUX)
-# ==============================
+# =============================
+# IMAGE GENERATION
+# =============================
 
-def generate_image(image_prompt):
+def generate_image(prompt):
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -177,38 +166,33 @@ def generate_image(image_prompt):
 
     payload = {
         "model": IMAGE_MODEL,
-        "prompt": image_prompt,
+        "prompt": prompt,
         "size": "1024x1024"
     }
 
     response = requests.post(
         "https://openrouter.ai/api/v1/images/generations",
         headers=headers,
-        json=payload,
-        timeout=120
+        json=payload
     )
 
     data = response.json()
-
-    print("Image API Response:", data)
 
     if "data" not in data:
         raise Exception(f"Image generation error: {data}")
 
     image_url = data["data"][0]["url"]
 
-    image_data = requests.get(image_url).content
+    img = requests.get(image_url).content
 
-    filename = "festival.png"
+    with open("festival.png", "wb") as f:
+        f.write(img)
 
-    with open(filename, "wb") as f:
-        f.write(image_data)
+    return "festival.png"
 
-    return filename
-
-# ==============================
+# =============================
 # POST TO X
-# ==============================
+# =============================
 
 def post_to_x(caption, image_path):
 
@@ -242,13 +226,11 @@ def post_to_x(caption, image_path):
     tweet_url = f"https://x.com/{username}/status/{tweet_id}"
 
     print("✅ Tweet Posted Successfully")
-    print("🔗 Tweet URL:", tweet_url)
+    print("🔗", tweet_url)
 
-    return tweet_url
-
-# ==============================
+# =============================
 # MAIN PIPELINE
-# ==============================
+# =============================
 
 def main():
 
@@ -264,24 +246,19 @@ def main():
 
     research = research_festival(festival)
 
+    time.sleep(5)
+
     caption = generate_caption(festival, research)
+
+    time.sleep(5)
 
     image_prompt = generate_image_prompt(festival, research)
 
     image_path = generate_image(image_prompt)
 
-    tweet_url = post_to_x(caption, image_path)
+    post_to_x(caption, image_path)
 
-    print("Tweet URL:", tweet_url)
-
-research = research_festival(festival)
-time.sleep(5)
-
-caption = generate_caption(festival, research)
-time.sleep(5)
-
-image_prompt = generate_image_prompt(festival, research)
-
+# =============================
 
 if __name__ == "__main__":
     main()

@@ -4,7 +4,7 @@ import tweepy
 import logging
 from datetime import datetime
 from googleapiclient.discovery import build
-
+import time
 # ==============================
 # ENV VARIABLES
 # ==============================
@@ -52,6 +52,7 @@ def get_today_festival():
 # OPENROUTER TEXT CALL
 # ==============================
 
+
 def call_openrouter_text(prompt):
 
     headers = {
@@ -68,22 +69,28 @@ def call_openrouter_text(prompt):
         ]
     }
 
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        json=payload,
-        timeout=60
-    )
+    for attempt in range(3):
 
-    data = response.json()
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60
+        )
 
-    print("OpenRouter Response:", data)
+        data = response.json()
 
-    if "choices" not in data:
+        if "choices" in data:
+            return data["choices"][0]["message"]["content"].strip()
+
+        if "error" in data and data["error"].get("code") == 429:
+            print("⚠️ Rate limited. Retrying in 10 seconds...")
+            time.sleep(10)
+            continue
+
         raise Exception(f"OpenRouter error: {data}")
 
-    return data["choices"][0]["message"]["content"].strip()
-
+    raise Exception("OpenRouter failed after retries.")
 # ==============================
 # RESEARCH FESTIVAL
 # ==============================
@@ -266,6 +273,14 @@ def main():
     tweet_url = post_to_x(caption, image_path)
 
     print("Tweet URL:", tweet_url)
+
+research = research_festival(festival)
+time.sleep(5)
+
+caption = generate_caption(festival, research)
+time.sleep(5)
+
+image_prompt = generate_image_prompt(festival, research)
 
 
 if __name__ == "__main__":

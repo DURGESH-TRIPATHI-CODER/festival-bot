@@ -162,7 +162,7 @@ no text
 
 def generate_image(prompt):
 
-    url = "https://openrouter.ai/api/v1/images"
+    url = "https://openrouter.ai/api/v1/chat/completions"
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -173,16 +173,23 @@ def generate_image(prompt):
 
     payload = {
         "model": "black-forest-labs/flux-1-schnell",
-        "prompt": prompt,
-        "width": 1024,
-        "height": 1024
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "modalities": ["image"],
+        "image": {
+            "size": "1024x1024"
+        }
     }
 
     response = requests.post(url, headers=headers, json=payload, timeout=120)
 
     if response.status_code != 200:
-        print("Flux error response:", response.text)
-        raise Exception("Flux API request failed")
+        print("Flux API error:", response.text)
+        raise Exception("Flux request failed")
 
     try:
         data = response.json()
@@ -190,10 +197,10 @@ def generate_image(prompt):
         print("Non JSON response:", response.text)
         raise Exception("Flux returned invalid response")
 
-    if "data" not in data:
+    if "images" not in data["choices"][0]["message"]:
         raise Exception(f"Unexpected Flux response: {data}")
 
-    image_url = data["data"][0]["url"]
+    image_url = data["choices"][0]["message"]["images"][0]["url"]
 
     img = requests.get(image_url).content
 
